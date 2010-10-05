@@ -349,14 +349,15 @@ public class XmlDumpReader  extends DefaultHandler {
     //greife des text ab, und mache ein eigens (einfacheres insert)
     String comment = sqlEscape(rev.Comment);
     String text = sqlEscape(rev.Text);
+    String title = sqlEscape(page.Title.toString());
 //    comment = new String(comment.getBytes("macRoman"), "UTF-8");
 //    text = new String(text.getBytes("macRoman"), "UTF-8");
     System.out.println(""
             + "INSERT INTO `wikipediasql`.`import` ("
-            + "`ID`,`OriginalID`,`Comment`,`Text`"
+            + "`ID`,`OriginalID`,`Title`,`Comment`,`Text`"
             + ")\n"
             + "VALUES ("
-            + "'', '"+rev.Id+"',\""+comment+"\",\""+text+"\""
+            + "'', '"+rev.Id+"',"+title+","+comment+","+text+" "
             + ");\n");
 //    rev.Comment.getBytes("UTF-8");
 //
