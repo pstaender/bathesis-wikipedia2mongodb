@@ -140,6 +140,11 @@ class Dumper {
 				: (DumpWriter)writers;
 		
 		XmlDumpReader reader = new XmlDumpReader(input, outputSink);
+    System.out.println("DROP DATABASE `wikipediasql`;\n"
+            + "CREATE DATABASE `wikipediasql` DEFAULT CHARACTER SET utf8 COLLATE utf8_general_ci;\n"
+            + "CREATE TABLE `wikipediasql`.`import` ("
+            + "`ID` INT NOT NULL AUTO_INCREMENT PRIMARY KEY ,`OriginalID` INT NOT NULL ,`Comment` TEXT NOT NULL ,`Text` LONGTEXT NOT NULL"
+            + ") ENGINE = MYISAM CHARACTER SET utf8 COLLATE utf8_unicode_ci;\n");
 		reader.readDump();
 	}
 

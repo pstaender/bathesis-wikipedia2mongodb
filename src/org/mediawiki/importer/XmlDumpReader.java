@@ -82,6 +82,8 @@ public class XmlDumpReader  extends DefaultHandler {
 	 */
 	public void readDump() throws IOException {
 		try {
+//      System.out.println("hier...");
+//      die();
 			SAXParserFactory factory = SAXParserFactory.newInstance();
 			SAXParser parser = factory.newSAXParser();
 	
@@ -343,8 +345,62 @@ public class XmlDumpReader  extends DefaultHandler {
 	}
 	
 	void closeRevision() throws IOException {
-		writer.writeRevision(rev);
-		rev = null;
+    //geaendert von philipp.staender@gmail.com
+    //greife des text ab, und mache ein eigens (einfacheres insert)
+    String comment = sqlEscape(rev.Comment);
+    String text = sqlEscape(rev.Text);
+//    comment = new String(comment.getBytes("macRoman"), "UTF-8");
+//    text = new String(text.getBytes("macRoman"), "UTF-8");
+    System.out.println(""
+            + "INSERT INTO `wikipediasql`.`import` ("
+            + "`ID`,`OriginalID`,`Comment`,`Text`"
+            + ")\n"
+            + "VALUES ("
+            + "'', '"+rev.Id+"',\""+comment+"\",\""+text+"\""
+            + ");\n");
+//    rev.Comment.getBytes("UTF-8");
+//
+//		writer.writeRevision(rev);
+//		rev = null;
+	}
+
+  //neu hinzugefügt, genommen aus SQLWriter
+
+  protected static String sqlEscape(String str) {
+		if (str.length() == 0)
+			return "''"; //TODO "NULL",too ?
+		final int len = str.length();
+		StringBuffer sql = new StringBuffer(len * 2);
+		synchronized (sql) { //only for StringBuffer
+		sql.append('\'');
+		for (int i = 0; i < len; i++) {
+			char c = str.charAt(i);
+			switch (c) {
+			case '\u0000':
+				sql.append('\\').append('0');
+				break;
+			case '\n':
+				sql.append('\\').append('n');
+				break;
+			case '\r':
+				sql.append('\\').append('r');
+				break;
+			case '\u001a':
+				sql.append('\\').append('Z');
+				break;
+			case '"':
+			case '\'':
+			case '\\':
+				sql.append('\\');
+				// fall through
+			default:
+				sql.append(c);
+				break;
+			}
+		}
+		sql.append('\'');
+		return sql.toString();
+		}
 	}
 
 	void readTimestamp() {
