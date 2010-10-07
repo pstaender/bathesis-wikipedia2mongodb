@@ -346,17 +346,14 @@ public class XmlDumpReader  extends DefaultHandler {
 	
 	void closeRevision() throws IOException {
     //modified by philipp.staender@gmail.com
-    writeSQLAndNoSQL();
-//		writer.writeRevision(rev);
-//		rev = null;
-	}
-
-  void writeSQLAndNoSQL() {
     //added by philipp.staender@gmail.com
     //greife des text ab, und mache ein eigens (einfacheres insert)
-    String comment = sqlEscape(rev.Comment);
-    String text = sqlEscape(rev.Text);
-    String title = sqlEscape(page.Title.toString());
+    String comment = "''";
+    if (rev.Comment!=null) comment = sqlEscape(rev.Comment);
+    String text = "''";
+    if (rev.Text!=null) text = sqlEscape(rev.Text);
+    String title = "''";
+    if (page.Title!=null) title = sqlEscape(page.Title.toString());
     System.out.println(""
             + "INSERT INTO `wikipediasql`.`import` ("
             + "`ID`,`OriginalID`,`Title`,`Comment`,`Text`"
@@ -364,10 +361,13 @@ public class XmlDumpReader  extends DefaultHandler {
             + "VALUES ("
             + "'', '"+rev.Id+"',"+title+","+comment+","+text+" "
             + ");\n");
-  }
+
+//		writer.writeRevision(rev);
+		rev = null;
+	}
+
 
   //neu hinzugefügt, genommen aus SQLWriter
-
   protected static String sqlEscape(String str) {
 		if (str.length() == 0)
 			return "''"; //TODO "NULL",too ?
