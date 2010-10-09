@@ -41,6 +41,17 @@ import org.xml.sax.Attributes;
 import org.xml.sax.SAXException;
 import org.xml.sax.helpers.DefaultHandler;
 
+//added by philipp.staender@gmail.com
+//wird benoetigt fuer monogdb
+import com.mongodb.BasicDBObject;
+import com.mongodb.Mongo;
+import com.mongodb.DB;
+import com.mongodb.DBCollection;
+import com.mongodb.DBCursor;
+import com.mongodb.DBObject;
+import java.util.List;
+import java.util.Set;
+
 public class XmlDumpReader  extends DefaultHandler {
 	InputStream input;
 	DumpWriter writer;
@@ -354,20 +365,52 @@ public class XmlDumpReader  extends DefaultHandler {
     if (rev.Text!=null) text = sqlEscape(rev.Text);
     String title = "''";
     if (page.Title!=null) title = sqlEscape(page.Title.toString());
-    System.out.println(""
-            + "INSERT INTO `wikipediasql`.`import` ("
-            + "`ID`,`OriginalID`,`Title`,`Comment`,`Text`"
-            + ")\n"
-            + "VALUES ("
-            + "'', '"+rev.Id+"',"+title+","+comment+","+text+" "
-            + ");\n");
-
+//    System.out.println(""
+//            + "INSERT INTO `wikipediasql`.`import` ("
+//            + "`ID`,`OriginalID`,`Title`,`Comment`,`Text`"
+//            + ")\n"
+//            + "VALUES ("
+//            + "'', '"+rev.Id+"',"+title+","+comment+","+text+" "
+//            + ");\n");
 //		writer.writeRevision(rev);
+    insertToMongoDB();
 		rev = null;
 	}
 
+  //added by philipp.staender@gmail.com
+  void insertToMongoDB() {
+    String comment = "";
+    if (rev.Comment!=null) comment = rev.Comment;
+    String text = "";
+    if (rev.Text!=null) text = rev.Text;
+    String title = "";
+    if (page.Title!=null) title = page.Title.toString();
+    try {
+          Mongo m = new Mongo();
+          DB db = m.getDB( "wikipedia" );
 
-  //neu hinzugefügt, genommen aus SQLWriter
+          DBCollection coll = db.getCollection("pages");
+          coll.ensureIndex("title");
+
+          BasicDBObject doc = new BasicDBObject();
+          doc.put("title", title);
+          doc.put("text", text);
+          doc.put("comment", comment);
+
+
+
+          coll.insert(doc);
+          System.out.println("'"+title+"' ... ok\n");
+
+          m.close();
+
+        } catch (Exception e) {
+          System.out.println("Keine Verbindung zu MongoDB");
+        }
+  }
+
+  //added by philipp.staender@gmail.com
+  //neu hinzugef√ºgt, genommen aus SQLWriter
   protected static String sqlEscape(String str) {
 		if (str.length() == 0)
 			return "''"; //TODO "NULL",too ?
