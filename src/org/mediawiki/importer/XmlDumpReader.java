@@ -49,8 +49,12 @@ import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class XmlDumpReader  extends DefaultHandler {
 	InputStream input;
@@ -381,10 +385,28 @@ public class XmlDumpReader  extends DefaultHandler {
   void insertToMongoDB() {
     String comment = "";
     if (rev.Comment!=null) comment = rev.Comment;
-    String text = "";
-    if (rev.Text!=null) text = rev.Text;
     String title = "";
     if (page.Title!=null) title = page.Title.toString();
+    String text = "";
+    if (rev.Text!=null) text = rev.Text;
+    text = text.replaceAll("(?s)<!--.*?-->", "");
+//    text = "\n== "+title+" ==\n"+text;
+ 
+    //split text
+    String expression = "\\s+\\=\\=\\s+.+\\s+\\=\\=\\s+";
+    Matcher match = Pattern.compile(expression).matcher(text);
+
+    String[] splittedText = text.split(expression);
+    ArrayList<String> subtitles = new ArrayList<String>();
+    String subtitle = "";
+
+    while (match.find()) {
+      subtitle = match.group().trim();
+      //entferne == ... == vom title
+
+      subtitles.add(subtitle.substring(3,subtitle.length()-3));
+    }
+
     try {
           Mongo m = new Mongo();
           DB db = m.getDB( "wikipedia" );
@@ -394,12 +416,29 @@ public class XmlDumpReader  extends DefaultHandler {
 
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
-          doc.put("text", text);
+//          doc.put("text", text);
           doc.put("comment", comment);
 
+          BasicDBObject content = new BasicDBObject();
 
-
+          int sectionCount = 0;
+          for (String string : splittedText) {
+            BasicDBObject section = new BasicDBObject();
+            try {
+              subtitle = subtitles.get(sectionCount);
+            } catch (Exception e) {
+              subtitle = String.valueOf(sectionCount);
+            } finally {
+              sectionCount++;
+            }
+//            subtitle + string (text)
+            section.put("text",string);
+            content.put(subtitle, section);
+            
+          }
+          doc.put("content", content);
           coll.insert(doc);
+          
           System.out.println("'"+title+"' ... ok\n");
 
           m.close();
