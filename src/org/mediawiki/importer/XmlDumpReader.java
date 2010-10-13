@@ -441,7 +441,7 @@ public class XmlDumpReader  extends DefaultHandler {
             
           }
 
-          if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)"))
+//          if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)"))
 
           doc.put("content", content);
           coll.insert(doc);
