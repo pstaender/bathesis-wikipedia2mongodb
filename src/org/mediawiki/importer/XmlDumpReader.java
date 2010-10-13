@@ -412,13 +412,17 @@ public class XmlDumpReader  extends DefaultHandler {
           Mongo m = new Mongo();
           DB db = m.getDB( "wikipedia" );
 
-          DBCollection coll = db.getCollection("pages");
-          coll.ensureIndex("title");
+          DBCollection article = db.getCollection("articles");
+          DBCollection chapter = db.getCollection("chapters");
+
+          article.ensureIndex("title");
 
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
-          doc.put("articletext", text);
+//          doc.put("articletext", text);
           doc.put("comment", comment);
+
+          BasicDBObject chapters = new BasicDBObject();
 
           BasicDBObject content = new BasicDBObject();
 
@@ -429,22 +433,33 @@ public class XmlDumpReader  extends DefaultHandler {
             try {
               subtitle = subtitles.get(sectionCount);
             } catch (Exception e) {
-              subtitle = "leer";//String.valueOf(sectionCount);
+              subtitle = "";
             }
+            if (subtitle=="Index") subtitle = "";
 //            subtitle + string (text)
             //nur hinzufügen, wenn text vorhanden ist
+
             if (string.trim().length()>0) {
+              //erstelle unterteiliungen, hier kapitel genannt
+              section.put("title", subtitle);
               section.put("text",string);
-              content.put(subtitle, section);
+              chapter.insert(section);
+
+              chapters.put(String.valueOf(sectionCount),section.get("_id"));
             }
             
             
           }
 
-//          if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)"))
-
-          doc.put("content", content);
-          coll.insert(doc);
+          if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)\\s.*")) {
+            String[] splittedRedirect = rev.Text.split("\\#(redirect|weiterleitung|Weiterleitung|Redirect|REDIRECT)\\s+\\[\\[");
+            doc.put("redirect", splittedRedirect[1].trim().substring(0, splittedRedirect[1].length()-2));
+            System.out.println(title+" => "+splittedRedirect[1].trim().substring(0, splittedRedirect[1].length()-2));
+          } else {
+            doc.put("chapters", chapters);
+          }
+          
+          article.insert(doc);
           
           System.out.println("'"+title+"' ... ok\n");
 
