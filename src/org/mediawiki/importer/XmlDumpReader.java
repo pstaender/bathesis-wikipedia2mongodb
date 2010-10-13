@@ -387,10 +387,12 @@ public class XmlDumpReader  extends DefaultHandler {
     if (rev.Comment!=null) comment = rev.Comment;
     String title = "";
     if (page.Title!=null) title = page.Title.toString();
+
     String text = "";
     if (rev.Text!=null) text = rev.Text;
     text = text.replaceAll("(?s)<!--.*?-->", "");
-//    text = "\n== "+title+" ==\n"+text;
+
+    text = "\n== Index ==\n \n"+text;
  
     //split text
     String expression = "\\s+\\=\\=\\s+.+\\s+\\=\\=\\s+";
@@ -402,8 +404,7 @@ public class XmlDumpReader  extends DefaultHandler {
 
     while (match.find()) {
       subtitle = match.group().trim();
-      //entferne == ... == vom title
-
+      //entferne == ... == vom Titel
       subtitles.add(subtitle.substring(3,subtitle.length()-3));
     }
 
@@ -416,26 +417,32 @@ public class XmlDumpReader  extends DefaultHandler {
 
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
-//          doc.put("text", text);
+          doc.put("articletext", text);
           doc.put("comment", comment);
 
           BasicDBObject content = new BasicDBObject();
 
-          int sectionCount = 0;
+          int sectionCount = -2;
           for (String string : splittedText) {
+            sectionCount++;
             BasicDBObject section = new BasicDBObject();
             try {
               subtitle = subtitles.get(sectionCount);
             } catch (Exception e) {
-              subtitle = String.valueOf(sectionCount);
-            } finally {
-              sectionCount++;
+              subtitle = "leer";//String.valueOf(sectionCount);
             }
 //            subtitle + string (text)
-            section.put("text",string);
-            content.put(subtitle, section);
+            //nur hinzufügen, wenn text vorhanden ist
+            if (string.trim().length()>0) {
+              section.put("text",string);
+              content.put(subtitle, section);
+            }
+            
             
           }
+
+          if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)"))
+
           doc.put("content", content);
           coll.insert(doc);
           
