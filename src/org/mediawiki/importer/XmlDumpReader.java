@@ -27,6 +27,7 @@ package org.mediawiki.importer;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.security.NoSuchAlgorithmException;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.HashMap;
@@ -49,12 +50,14 @@ import com.mongodb.DB;
 import com.mongodb.DBCollection;
 import com.mongodb.DBCursor;
 import com.mongodb.DBObject;
+import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.bson.types.ObjectId;
 
 public class XmlDumpReader  extends DefaultHandler {
 	InputStream input;
@@ -383,16 +386,21 @@ public class XmlDumpReader  extends DefaultHandler {
 
   //added by philipp.staender@gmail.com
   void insertToMongoDB() {
+
+
     String comment = "";
     if (rev.Comment!=null) comment = rev.Comment;
     String title = "";
     if (page.Title!=null) title = page.Title.toString();
 
+
+
     String text = "";
     if (rev.Text!=null) text = rev.Text;
     text = text.replaceAll("(?s)<!--.*?-->", "");
 
-    text = "\n== Index ==\n \n"+text;
+    //Der erste Absatz erhält einfach nochmal den Artikeltitel
+    text = "\n== "+title+" ==\n \n"+text;
  
     //split text
     String expression = "\\s+\\=\\=\\s+.+\\s+\\=\\=\\s+";
@@ -413,14 +421,32 @@ public class XmlDumpReader  extends DefaultHandler {
           DB db = m.getDB( "wikipedia" );
 
           DBCollection article = db.getCollection("articles");
-          DBCollection chapter = db.getCollection("chapters");
+          DBCollection chapter = db.getCollection("text");
 
           article.ensureIndex("title");
 
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
-//          doc.put("articletext", text);
           doc.put("comment", comment);
+
+          try {
+            MessageDigest sha = MessageDigest.getInstance("SHA1");
+            byte[] hash = sha.digest(text.getBytes());
+
+            StringBuilder sb = new StringBuilder();
+            for (int i = 0; i < hash.length; ++i) {
+               sb.append(
+                   Integer.toHexString(
+                       (hash[i] & 0xFF) | 0x100
+                   ).toLowerCase().substring(1,3)
+               );
+            }
+            doc.put("_id",sb.toString());
+          } catch (Exception e) {
+            System.out.println("Error:"+e.getMessage());
+          }
+
+          
 
           BasicDBObject chapters = new BasicDBObject();
 
@@ -429,36 +455,53 @@ public class XmlDumpReader  extends DefaultHandler {
           int sectionCount = -2;
           for (String string : splittedText) {
             sectionCount++;
-            BasicDBObject section = new BasicDBObject();
+            
             try {
               subtitle = subtitles.get(sectionCount);
             } catch (Exception e) {
               subtitle = "";
             }
-            if (subtitle=="Index") subtitle = "";
 //            subtitle + string (text)
             //nur hinzufügen, wenn text vorhanden ist
 
             if (string.trim().length()>0) {
               //erstelle unterteiliungen, hier kapitel genannt
-              section.put("title", subtitle);
-              section.put("text",string);
-              chapter.insert(section);
+              //jedes kapitel wird nochmal in eine eigene collection gesetzt, für Volltextsuche
+              content.put(subtitle,string);
+              chapters.put("article",title);
+              chapters.put("title", subtitle);
+              chapters.put("text",string);
 
-              chapters.put(String.valueOf(sectionCount),section.get("_id"));
-            }
-            
-            
+              try {
+                String idhash = text+"fortextsearch"+String.valueOf(sectionCount);
+                MessageDigest sha2 = MessageDigest.getInstance("SHA1");
+                byte[] hash = sha2.digest(idhash.toString().getBytes());
+
+                StringBuilder serialisedid = new StringBuilder();
+                for (int i = 0; i < hash.length; ++i) {
+                   serialisedid.append(
+                       Integer.toHexString(
+                           (hash[i] & 0xFF) | 0x100
+                       ).toLowerCase().substring(1,3)
+                   );
+                }
+                chapters.put("_id",serialisedid.toString());
+              } catch (Exception e) {
+                System.out.println("Error bei text:"+e.getMessage());
+              }
+
+              chapter.insert(chapters);
+            } 
           }
 
           if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)\\s.*")) {
-            String[] splittedRedirect = rev.Text.split("\\#(redirect|weiterleitung|Weiterleitung|Redirect|REDIRECT)\\s+\\[\\[");
+            String[] splittedRedirect = rev.Text.split("\\#(redirect|weiterleitung|Weiterleitung|WEITERLEITUNG|Redirect|REDIRECT)\\s+\\[\\[");
             doc.put("redirect", splittedRedirect[1].trim().substring(0, splittedRedirect[1].length()-2));
             System.out.println(title+" => "+splittedRedirect[1].trim().substring(0, splittedRedirect[1].length()-2));
           } else {
-            doc.put("chapters", chapters);
+            doc.put("content", content);
           }
-          
+
           article.insert(doc);
           
           System.out.println("'"+title+"' ... ok\n");
@@ -466,7 +509,7 @@ public class XmlDumpReader  extends DefaultHandler {
           m.close();
 
         } catch (Exception e) {
-          System.out.println("Keine Verbindung zu MongoDB");
+          System.out.println("Fehler bei  MongoDB:"+e.getMessage());
         }
   }
 
