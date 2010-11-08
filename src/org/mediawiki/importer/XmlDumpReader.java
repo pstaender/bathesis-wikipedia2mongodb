@@ -380,9 +380,9 @@ public class XmlDumpReader  extends DefaultHandler {
 //            + "'', '"+rev.Id+"',"+title+","+comment+","+text+" "
 //            + ");\n");
 //		writer.writeRevision(rev);
-    insertToMongoDB();
-		rev = null;
-	}
+     insertToMongoDB();
+     rev = null;
+    }
 
   //added by philipp.staender@gmail.com
   void insertToMongoDB() {
@@ -485,13 +485,13 @@ public class XmlDumpReader  extends DefaultHandler {
                        ).toLowerCase().substring(1,3)
                    );
                 }
-                chapters.put("_id",serialisedid.toString());
+                //chapters.put("_id",serialisedid.toString());
               } catch (Exception e) {
                 System.out.println("Error bei text:"+e.getMessage());
               }
 
               chapter.insert(chapters);
-            } 
+            }
           }
 
           if (rev.Text.trim().toLowerCase().matches("\\A\\#(redirect|weiterleitung)\\s.*")) {
@@ -505,7 +505,8 @@ public class XmlDumpReader  extends DefaultHandler {
           article.insert(doc);
           
           System.out.println("'"+title+"' ... ok\n");
-
+          long stoptime = 2000L;
+          Thread.sleep(stoptime);
           m.close();
 
         } catch (Exception e) {
