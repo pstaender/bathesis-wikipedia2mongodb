@@ -424,7 +424,7 @@ public class XmlDumpReader  extends DefaultHandler {
     text = "\n== "+title+" ==\n \n"+text;
 
     //notiere alle verlinkungen
-    String linkExpression = "\\[\\[[\\w[[:alpha:]]0-9\\s\\'\\\"\\.\\-\\_]+\\]\\]";
+    String linkExpression = "\\[\\[[0-9\\s\\'\\\"\\.\\-\\_\\p{L}]+\\]\\]";
     Matcher matchLinks = Pattern.compile(linkExpression).matcher(text);
     String[] splittedLinks = text.split(linkExpression);
     ArrayList<String> links = new ArrayList<String>();
