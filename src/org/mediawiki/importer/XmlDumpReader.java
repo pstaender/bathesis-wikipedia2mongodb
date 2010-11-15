@@ -423,12 +423,7 @@ public class XmlDumpReader  extends DefaultHandler {
     //Der erste Absatz erhält einfach nochmal den Artikeltitel
     text = "\n== "+title+" ==\n \n"+text;
 
-    //notiere alle verlinkungen
-    String linkExpression = "\\[\\[[0-9\\s\\'\\\"\\.\\-\\_\\p{L}]+\\]\\]";
-    Matcher matchLinks = Pattern.compile(linkExpression).matcher(text);
-    String[] splittedLinks = text.split(linkExpression);
-    ArrayList<String> links = new ArrayList<String>();
-    String linkText = "";
+   
     
 
     //unterteile text in unterüberschriften
@@ -445,10 +440,14 @@ public class XmlDumpReader  extends DefaultHandler {
 
     try {
           Mongo m = new Mongo();
+          //m.dropDatabase("wikipedia");
           DB db = m.getDB( "wikipedia" );
           DBCollection article = db.getCollection("articles");
           DBCollection textindex = db.getCollection("textindex");
           article.ensureIndex("title");
+          textindex.ensureIndex("title");
+          textindex.ensureIndex("article");
+          textindex.ensureIndex("link");
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
           doc.put("comment", comment);
@@ -457,17 +456,7 @@ public class XmlDumpReader  extends DefaultHandler {
           BasicDBObject content = new BasicDBObject();
           BasicDBObject link = new BasicDBObject();
 
-          int linksCount = -1;
-          while (matchLinks.find()) {
-              linksCount++;
-              linkText = matchLinks.group().trim();
-              
-              //entferne [[ ... ]] vom Titel
-              linkText = linkText.substring(2,linkText.length()-2);
-              link.put(linkText,linkText);
-              //System.out.println("link::"+linkText);
-            }
-
+          
 
           int sectionCount = -2;
           for (String string : splittedText) {
@@ -484,12 +473,36 @@ public class XmlDumpReader  extends DefaultHandler {
               //jedes kapitel wird nochmal in eine eigene collection gesetzt, für Volltextsuche
                 
               content.put(subtitle,string);
-              content.put("link",link);
+              
               textindizies.put("article",title);
               textindizies.put("title", subtitle);
               textindizies.put("text",string);
               textindizies.put("_id",XmlDumpReader.generateHashForID(text+"fortextsearch"+String.valueOf(sectionCount)));
-              textindex.insert(textindizies);
+              
+
+              //füge Links hinzu
+              //notiere alle verlinkungen
+                String linkExpression = "\\[\\[[0-9\\s\\'\\\"\\.\\-\\_\\p{L}]+\\]\\]";
+                Matcher matchLinks = Pattern.compile(linkExpression).matcher(string);
+                String[] splittedLinks = text.split(linkExpression);
+                ArrayList<String> links = new ArrayList<String>();
+                String linkText = "";
+
+                int linksCount = -1;
+                while (matchLinks.find()) {
+                  linksCount++;
+                  linkText = matchLinks.group().trim();
+
+                  //entferne [[ ... ]] vom Titel
+                  linkText = linkText.substring(2,linkText.length()-2);
+                  links.add(linkText);
+                  //link.put(linkText);
+                  //System.out.println("link::"+linkText);
+                }
+
+                textindizies.put("link",links);
+                textindex.insert(textindizies);
+
             }
           }
 
