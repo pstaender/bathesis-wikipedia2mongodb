@@ -384,6 +384,27 @@ public class XmlDumpReader  extends DefaultHandler {
      rev = null;
     }
 
+  static String generateHashForID(String text) {
+      //erstelle hash
+      try {
+        MessageDigest sha = MessageDigest.getInstance("SHA1");
+        byte[] hash = sha.digest(text.getBytes());
+
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < hash.length; ++i) {
+           sb.append(
+               Integer.toHexString(
+                   (hash[i] & 0xFF) | 0x100
+               ).toLowerCase().substring(1,3)
+           );
+        }
+        return sb.toString();
+      } catch (Exception e) {
+        System.out.println("Error:"+e.getMessage());
+        return "";
+      }
+  }
+
   //added by philipp.staender@gmail.com
   void insertToMongoDB() {
 
@@ -401,15 +422,21 @@ public class XmlDumpReader  extends DefaultHandler {
 
     //Der erste Absatz erhält einfach nochmal den Artikeltitel
     text = "\n== "+title+" ==\n \n"+text;
- 
-    //split text
+
+    //notiere alle verlinkungen
+    String linkExpression = "\\[\\[[\\w[[:alpha:]]0-9\\s\\'\\\"\\.\\-\\_]+\\]\\]";
+    Matcher matchLinks = Pattern.compile(linkExpression).matcher(text);
+    String[] splittedLinks = text.split(linkExpression);
+    ArrayList<String> links = new ArrayList<String>();
+    String linkText = "";
+    
+
+    //unterteile text in unterüberschriften
     String expression = "\\s+\\=\\=\\s+.+\\s+\\=\\=\\s+";
     Matcher match = Pattern.compile(expression).matcher(text);
-
     String[] splittedText = text.split(expression);
     ArrayList<String> subtitles = new ArrayList<String>();
     String subtitle = "";
-
     while (match.find()) {
       subtitle = match.group().trim();
       //entferne == ... == vom Titel
@@ -419,78 +446,50 @@ public class XmlDumpReader  extends DefaultHandler {
     try {
           Mongo m = new Mongo();
           DB db = m.getDB( "wikipedia" );
-
           DBCollection article = db.getCollection("articles");
-          DBCollection chapter = db.getCollection("text");
-
+          DBCollection textindex = db.getCollection("textindex");
           article.ensureIndex("title");
-
           BasicDBObject doc = new BasicDBObject();
           doc.put("title", title);
           doc.put("comment", comment);
-
-          try {
-            MessageDigest sha = MessageDigest.getInstance("SHA1");
-            byte[] hash = sha.digest(text.getBytes());
-
-            StringBuilder sb = new StringBuilder();
-            for (int i = 0; i < hash.length; ++i) {
-               sb.append(
-                   Integer.toHexString(
-                       (hash[i] & 0xFF) | 0x100
-                   ).toLowerCase().substring(1,3)
-               );
-            }
-            doc.put("_id",sb.toString());
-          } catch (Exception e) {
-            System.out.println("Error:"+e.getMessage());
-          }
-
-          
-
-          BasicDBObject chapters = new BasicDBObject();
-
+          doc.put("_id",XmlDumpReader.generateHashForID(text));
+          BasicDBObject textindizies = new BasicDBObject();
           BasicDBObject content = new BasicDBObject();
+          BasicDBObject link = new BasicDBObject();
+
+          int linksCount = -1;
+          while (matchLinks.find()) {
+              linksCount++;
+              linkText = matchLinks.group().trim();
+              
+              //entferne [[ ... ]] vom Titel
+              linkText = linkText.substring(2,linkText.length()-2);
+              link.put(linkText,linkText);
+              //System.out.println("link::"+linkText);
+            }
+
 
           int sectionCount = -2;
           for (String string : splittedText) {
             sectionCount++;
-            
             try {
               subtitle = subtitles.get(sectionCount);
             } catch (Exception e) {
               subtitle = "";
             }
-//            subtitle + string (text)
             //nur hinzufügen, wenn text vorhanden ist
 
             if (string.trim().length()>0) {
-              //erstelle unterteiliungen, hier kapitel genannt
+              //erstelle unterteilungen, hier kapitel genannt
               //jedes kapitel wird nochmal in eine eigene collection gesetzt, für Volltextsuche
+                
               content.put(subtitle,string);
-              chapters.put("article",title);
-              chapters.put("title", subtitle);
-              chapters.put("text",string);
-
-              try {
-                String idhash = text+"fortextsearch"+String.valueOf(sectionCount);
-                MessageDigest sha2 = MessageDigest.getInstance("SHA1");
-                byte[] hash = sha2.digest(idhash.toString().getBytes());
-
-                StringBuilder serialisedid = new StringBuilder();
-                for (int i = 0; i < hash.length; ++i) {
-                   serialisedid.append(
-                       Integer.toHexString(
-                           (hash[i] & 0xFF) | 0x100
-                       ).toLowerCase().substring(1,3)
-                   );
-                }
-                //chapters.put("_id",serialisedid.toString());
-              } catch (Exception e) {
-                System.out.println("Error bei text:"+e.getMessage());
-              }
-
-              chapter.insert(chapters);
+              content.put("link",link);
+              textindizies.put("article",title);
+              textindizies.put("title", subtitle);
+              textindizies.put("text",string);
+              textindizies.put("_id",XmlDumpReader.generateHashForID(text+"fortextsearch"+String.valueOf(sectionCount)));
+              textindex.insert(textindizies);
             }
           }
 
@@ -505,10 +504,10 @@ public class XmlDumpReader  extends DefaultHandler {
           article.insert(doc);
           
           System.out.println("'"+title+"' ... ok\n");
-          long stoptime = 2000L;
-          Thread.sleep(stoptime);
+          long stoptime = 200L;
+          //Thread.sleep(stoptime);
           m.close();
-
+          
         } catch (Exception e) {
           System.out.println("Fehler bei  MongoDB:"+e.getMessage());
         }
