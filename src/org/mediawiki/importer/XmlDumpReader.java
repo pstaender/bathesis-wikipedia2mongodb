@@ -517,8 +517,8 @@ public class XmlDumpReader  extends DefaultHandler {
           article.insert(doc);
           
           System.out.println("'"+title+"' ... ok\n");
-          long stoptime = 200L;
-          //Thread.sleep(stoptime);
+          long stoptime = 100L;
+          Thread.sleep(stoptime);
           m.close();
           
         } catch (Exception e) {
