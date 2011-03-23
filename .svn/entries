@@ -12,7 +12,7 @@ http://svn.wikimedia.org/svnroot/mediawiki
 rainman
 has-props
 has-prop-mods
-
+svn:special svn:externals svn:needs-lock
 
 
 
@@ -25,9 +25,6 @@ has-prop-mods
 
 
 dd0e9695-b195-4be7-bd10-2dea1a65a6b6
-
-build
-dir
 
 .classpath
 file
@@ -97,8 +94,110 @@ has-props
 
 485
 
-src
+Makefile
+file
+
+
+
+
+2010-07-20T12:21:47.000000Z
+c40758e34777c6a90276a6ca723e7ed6
+2008-05-08T22:51:50.792188Z
+34481
+brion
+has-props
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+3108
+
+README
+file
+
+
+
+
+2010-07-20T12:21:47.000000Z
+d523d1c4d6eeb4162e8994e12dfe5ff5
+2007-07-06T22:14:33.890917Z
+23804
+brion
+has-props
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+6910
+
+build
 dir
+
+build.xml
+file
+
+
+
+
+2010-07-20T12:21:47.000000Z
+a2524b92650143604d45fc86ace287a7
+2007-03-11T16:59:31.826716Z
+20338
+river
+has-props
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+1782
 
 libs
 dir
@@ -171,105 +270,6 @@ daniel
 
 3685
 
-Makefile
-file
-
-
-
-
-2010-07-20T12:21:47.000000Z
-c40758e34777c6a90276a6ca723e7ed6
-2008-05-08T22:51:50.792188Z
-34481
-brion
-has-props
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-3108
-
-README
-file
-
-
-
-
-2010-07-20T12:21:47.000000Z
-d523d1c4d6eeb4162e8994e12dfe5ff5
-2007-07-06T22:14:33.890917Z
-23804
-brion
-has-props
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-6910
-
-build.xml
-file
-
-
-
-
-2010-07-20T12:21:47.000000Z
-a2524b92650143604d45fc86ace287a7
-2007-03-11T16:59:31.826716Z
-20338
-river
-has-props
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-1782
+src
+dir
 
