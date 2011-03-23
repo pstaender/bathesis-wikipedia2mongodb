@@ -93,6 +93,7 @@ public class XmlDumpReader  extends DefaultHandler {
         private int mysqlPort = 3306;
         private String mysqlDatabase = "nosql";
         private String mongodbDatabasename = "wikipedia";
+        private int lastInsertedArticleID = 0;
 	
 	/**
 	 * Initialize a processor for a MediaWiki XML dump stream.
@@ -505,8 +506,8 @@ public class XmlDumpReader  extends DefaultHandler {
         BasicDBObject link = new BasicDBObject();
 
         int sectionCount = -2;
-        int lastInsertedArticleID = 0;
         long textindexCount = 0;
+        Connection mysqlConnection = null;
         String redirect = "";
 
         //ist artikel ein redirect?
@@ -517,18 +518,21 @@ public class XmlDumpReader  extends DefaultHandler {
 
         //mysql insert kompletter artikel
         try {
-            Statement stmt = (Statement) this.mysqlConnection.createStatement();
+            mysqlConnection = this.mysqlConnection;
+            Statement stmt = (Statement) mysqlConnection.createStatement();
             String sql = "INSERT INTO  `articles` (`ID` , `MongoID` , `Title` , `Redirect` , `Comment` , `Content` )"
                     + "VALUES ("
                     + "NULL ,  \""+mongoid+"\",  "+XmlDumpReader.sqlEscape(title)+",  '"+redirect+"',  "+XmlDumpReader.sqlEscape(comment)+",  "+XmlDumpReader.sqlEscape(rev.Text)+" "
                     + ");";
             stmt.executeUpdate(sql);
+            this.lastInsertedArticleID++;
             //frage eingefuegte ID ab, da sie als Relation fuer die Absatze gebraucht wird
-            sql = "SELECT `ID` FROM `articles` WHERE 1 ORDER BY `ID` DESC LIMIT 1;";
+            //deaktiviert aus Performancegruenden
+            /*sql = "SELECT `ID` FROM `articles` WHERE 1 ORDER BY `ID` DESC LIMIT 1;";
             ResultSet lastArticle = stmt.executeQuery(sql);
             while (lastArticle.next()) {
                 lastInsertedArticleID = lastArticle.getInt("ID");
-            }
+            }*/
             
         } catch(SQLException e) {
             System.err.println("Fehler beim mysql insert: "+e.getMessage());
@@ -578,7 +582,8 @@ public class XmlDumpReader  extends DefaultHandler {
                     links.add(linkText);
                     sqlLinkValue=sqlLinkValue+","+linkText;
                     //mysql insert fuer links
-                    try {
+                    //deaktiviert, da nicht relevant fuer Benchmark
+                    /*try {
                         Statement stmt = (Statement) this.mysqlConnection.createStatement();
                         String sql = "INSERT INTO  `textindex_link` (`ID` , `ArticleID`, `Link`)"
                                 + "VALUES ("
@@ -587,13 +592,14 @@ public class XmlDumpReader  extends DefaultHandler {
                         stmt.executeUpdate(sql);
                     } catch(SQLException e) {
                         System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
-                    }
+                    }*/
                 }
                 if (sqlLinkValue.length()>0) sqlLinkValue=sqlLinkValue.substring(1);
 
                 //mysql insert für unterkapitel
                 try {
-                    Statement stmt = (Statement) this.mysqlConnection.createStatement();
+                    mysqlConnection = this.mysqlConnection;
+                    Statement stmt = (Statement) mysqlConnection.createStatement();
                     String sql = "INSERT INTO  `textindex` (`ID` , `ArticleID`, `MongoID` , `Sort`, `Title` , `Text` , `Links`)"
                             + "VALUES ("
                             + "NULL ,  '"+lastInsertedArticleID+"', \""+textindexMongoID+"\", "+(int)+textindexCount+", "+XmlDumpReader.sqlEscape(subtitle)+", "+XmlDumpReader.sqlEscape(string)+",  "+XmlDumpReader.sqlEscape(sqlLinkValue)+" "
@@ -610,6 +616,10 @@ public class XmlDumpReader  extends DefaultHandler {
             }
             //artikel in mongodb einfuegen
             article.insert(doc);
+            
+            //Speicher freigeben
+            article = null;
+            mysqlConnection = null;
 
             System.out.println("'"+title+"' ... ok\n");
         } catch (Exception e) {
