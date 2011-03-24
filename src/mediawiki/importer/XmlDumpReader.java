@@ -94,6 +94,7 @@ public class XmlDumpReader  extends DefaultHandler {
         private String mysqlDatabase = "nosql";
         private String mongodbDatabasename = "wikipedia";
         private int lastInsertedArticleID = 0;
+        private static boolean generateTextIndizes = false;
 	
 	/**
 	 * Initialize a processor for a MediaWiki XML dump stream.
@@ -118,11 +119,14 @@ public class XmlDumpReader  extends DefaultHandler {
                     DB db = m.getDB(this.mongodbDatabasename);
                     System.out.println("Setze Indizes in mongodb collections...");
                     this.mongodbArticles = db.getCollection("articles");
-                    this.mongodbTextindexes = db.getCollection("textindex");
                     this.mongodbArticles.ensureIndex("title");
-                    this.mongodbTextindexes.ensureIndex("title");
-                    this.mongodbTextindexes.ensureIndex("article");
-                    this.mongodbTextindexes.ensureIndex("link");
+                    if (XmlDumpReader.generateTextIndizes) {
+                        this.mongodbTextindexes = db.getCollection("textindex");
+                        this.mongodbTextindexes.ensureIndex("title");
+                        this.mongodbTextindexes.ensureIndex("article");
+                        this.mongodbTextindexes.ensureIndex("links");
+                        this.mongodbTextindexes.ensureIndex("sections.subtitle");
+                    }                 
                 } catch (Exception e) {
                     System.err.println("Fehler beim Initialisieren  der mongodb: "+e.getMessage());
                     System.err.println("Applikation wird beendet");
@@ -139,14 +143,12 @@ public class XmlDumpReader  extends DefaultHandler {
                 stmt.executeUpdate(sql);
                 sql = "CREATE TABLE IF NOT EXISTS `articles` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `MongoID` varchar(255) NOT NULL,  `Title` varchar(255) NOT NULL,  `Redirect` varchar(255) NOT NULL,  `Comment` text NOT NULL,  `Content` longtext NOT NULL,  PRIMARY KEY (`ID`),  KEY `ArticleTitle` (`Title`)) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
                 stmt.executeUpdate(sql);
-                sql = "DROP TABLE IF EXISTS `textindex`;";
-                stmt.executeUpdate(sql);
-                sql = "CREATE TABLE IF NOT EXISTS `textindex` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `ArticleID` int(11) NOT NULL,  `MongoID` varchar(255) DEFAULT NULL,  `Sort` int(11) NOT NULL, `Title` varchar(255) DEFAULT NULL,  `Text` longtext,  `Links` text NOT NULL,  PRIMARY KEY (`ID`),  KEY `ArticleID` (`ArticleID`)) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
-                stmt.executeUpdate(sql);
-                sql = "DROP TABLE IF EXISTS `textindex_link`;";
-                stmt.executeUpdate(sql);
-                sql = "CREATE TABLE IF NOT EXISTS `textindex_link` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `ArticleID` int(11) NOT NULL, `Link` varchar(255) NOT NULL,  PRIMARY KEY (`ID`),  KEY `ArticleID` (`ArticleID`) ) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
-                stmt.executeUpdate(sql);
+                if (XmlDumpReader.generateTextIndizes) {
+                    sql = "DROP TABLE IF EXISTS `textindex`;";
+                    stmt.executeUpdate(sql);
+                    sql = "CREATE TABLE IF NOT EXISTS `textindex` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `ArticleID` int(11) NOT NULL,  `MongoID` varchar(255) DEFAULT NULL,  `Sort` int(11) NOT NULL, `Title` varchar(255) DEFAULT NULL,  `Text` longtext,  `Links` text NOT NULL,  PRIMARY KEY (`ID`),  KEY `ArticleID` (`ArticleID`)) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
+                    stmt.executeUpdate(sql);
+                }
             } catch (SQLException ex) {
                 // handle any errors
                 System.err.println("Fehler beim Initialisieren der mysql Datenbank...");
@@ -166,8 +168,6 @@ public class XmlDumpReader  extends DefaultHandler {
 	 */
 	public void readDump() throws IOException {
 		try {
-//      System.out.println("hier...");
-//      die();
 			SAXParserFactory factory = SAXParserFactory.newInstance();
 			SAXParser parser = factory.newSAXParser();
 	
@@ -504,6 +504,8 @@ public class XmlDumpReader  extends DefaultHandler {
         BasicDBObject textindizies = new BasicDBObject();
         BasicDBObject content = new BasicDBObject();
         BasicDBObject link = new BasicDBObject();
+        ArrayList<Object> paragraphs = new ArrayList<Object>();
+        ArrayList<String> links = new ArrayList<String>();
 
         int sectionCount = -2;
         long textindexCount = 0;
@@ -549,72 +551,91 @@ public class XmlDumpReader  extends DefaultHandler {
             }
             //nur hinzufügen, wenn text vorhanden ist
             if (string.trim().length()>0) {
+                BasicDBObject paragraph = new BasicDBObject();
                 textindexCount++;
                 if (redirect.length()>0) {
                     doc.put("redirect", redirect);
                     System.out.println(title+" => "+redirect);
                 } else {
-                    doc.put("content", content);
-                }
-                String textindexMongoID=XmlDumpReader.generateHashForID(text+"fortextsearch"+String.valueOf(sectionCount));
-                //erstelle unterteilungen, hier kapitel genannt
-                //jedes kapitel wird nochmal in eine eigene collection gesetzt, für Volltextsuche
-                content.put(subtitle,string);
-                textindizies.put("article",title);
-                textindizies.put("order", (int) textindexCount);
-                textindizies.put("title", subtitle);
-                textindizies.put("text",string);
-                textindizies.put("_id",textindexMongoID);
+                    
+                
+                    String textindexMongoID=XmlDumpReader.generateHashForID(text+"fortextsearch"+String.valueOf(sectionCount));
+                    //erstelle unterteilungen, hier kapitel genannt
+                    //jedes kapitel wird nochmal in eine eigene collection gesetzt, für Volltextsuche
+                    if (XmlDumpReader.generateTextIndizes) {
+                        textindizies.put("article",title);
+                        textindizies.put("order", (int) textindexCount);
+                        textindizies.put("title", subtitle);
+                        textindizies.put("text",string);
+                        textindizies.put("_id",textindexMongoID);
+                    }
+                    
+                    paragraph.put("subtitle",subtitle);
+                    paragraph.put("content", string);
+                    paragraphs.add(paragraph);
 
-                //füge Links hinzu + notiere alle verlinkungen
-                String linkExpression = "\\[\\[[0-9\\s\\'\\\"\\.\\-\\_\\p{L}]+\\]\\]";
-                Matcher matchLinks = Pattern.compile(linkExpression).matcher(string);
-                String[] splittedLinks = text.split(linkExpression);
-                ArrayList<String> links = new ArrayList<String>();
-                String linkText = "";
-                int linksCount = -1;
-                String sqlLinkValue = "";
-                while (matchLinks.find()) {
-                    linksCount++;
-                    linkText = matchLinks.group().trim();
-                    //entferne [[ ... ]] vom Titel
-                    linkText = linkText.substring(2,linkText.length()-2);
-                    links.add(linkText);
-                    sqlLinkValue=sqlLinkValue+","+linkText;
-                    //mysql insert fuer links
-                    //deaktiviert, da nicht relevant fuer Benchmark
-                    /*try {
-                        Statement stmt = (Statement) this.mysqlConnection.createStatement();
-                        String sql = "INSERT INTO  `textindex_link` (`ID` , `ArticleID`, `Link`)"
-                                + "VALUES ("
-                                + "NULL ,  '"+lastInsertedArticleID+"', "+XmlDumpReader.sqlEscape(linkText)+" "
-                                + ");";
-                        stmt.executeUpdate(sql);
-                    } catch(SQLException e) {
-                        System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
-                    }*/
-                }
-                if (sqlLinkValue.length()>0) sqlLinkValue=sqlLinkValue.substring(1);
 
-                //mysql insert für unterkapitel
-                try {
-                    mysqlConnection = this.mysqlConnection;
-                    Statement stmt = (Statement) mysqlConnection.createStatement();
-                    String sql = "INSERT INTO  `textindex` (`ID` , `ArticleID`, `MongoID` , `Sort`, `Title` , `Text` , `Links`)"
-                            + "VALUES ("
-                            + "NULL ,  '"+lastInsertedArticleID+"', \""+textindexMongoID+"\", "+(int)+textindexCount+", "+XmlDumpReader.sqlEscape(subtitle)+", "+XmlDumpReader.sqlEscape(string)+",  "+XmlDumpReader.sqlEscape(sqlLinkValue)+" "
-                            + ");";
-                    stmt.executeUpdate(sql);
-                } catch(SQLException e) {
-                    System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
-                }
+                    //füge Links hinzu + notiere alle verlinkungen
+                    String linkExpression = "\\[\\[[0-9\\s\\'\\\"\\.\\-\\_\\p{L}]+\\]\\]";
+                    Matcher matchLinks = Pattern.compile(linkExpression).matcher(string);
+                    String[] splittedLinks = text.split(linkExpression);
+                    ArrayList<String> linksParagraph = new ArrayList<String>();
+                    String linkText = "";
+                    int linksCount = -1;
+                    String sqlLinkValue = "";
+                    while (matchLinks.find()) {
+                        linksCount++;
+                        linkText = matchLinks.group().trim();
+                        //entferne [[ ... ]] vom Titel
+                        linkText = linkText.substring(2,linkText.length()-2);
+                        links.add(linkText);
+                        linksParagraph.add(linkText);
+                        sqlLinkValue=sqlLinkValue+","+linkText;
+                        //mysql insert fuer links
+                        //deaktiviert, da nicht relevant fuer Benchmark
+                        /*try {
+                            Statement stmt = (Statement) this.mysqlConnection.createStatement();
+                            String sql = "INSERT INTO  `textindex_link` (`ID` , `ArticleID`, `Link`)"
+                                    + "VALUES ("
+                                    + "NULL ,  '"+lastInsertedArticleID+"', "+XmlDumpReader.sqlEscape(linkText)+" "
+                                    + ");";
+                            stmt.executeUpdate(sql);
+                        } catch(SQLException e) {
+                            System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
+                        }*/
+                    }
+                    if (sqlLinkValue.length()>0) sqlLinkValue=sqlLinkValue.substring(1);
 
-                textindizies.put("link",links);
-                textindex.insert(textindizies);
 
+                    //mysql + mongodb insert für unterkapitel für textindexierung
+                    if (XmlDumpReader.generateTextIndizes) {
+                        try {
+                            mysqlConnection = this.mysqlConnection;
+                            Statement stmt = (Statement) mysqlConnection.createStatement();
+                            String sql = "INSERT INTO  `textindex` (`ID` , `ArticleID`, `MongoID` , `Sort`, `Title` , `Text` , `Links`)"
+                                    + "VALUES ("
+                                    + "NULL ,  '"+lastInsertedArticleID+"', \""+textindexMongoID+"\", "+(int)+textindexCount+", "+XmlDumpReader.sqlEscape(subtitle)+", "+XmlDumpReader.sqlEscape(string)+",  "+XmlDumpReader.sqlEscape(sqlLinkValue)+" "
+                                    + ");";
+                            stmt.executeUpdate(sql);
+                        } catch(SQLException e) {
+                            System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
+                        }
+                        textindizies.put("link",links);
+                        textindex.insert(textindizies);
+                    }
+                    
+                    
+
+                    
+                
+                
                 }
             }
+        }
             //artikel in mongodb einfuegen
+            
+            doc.put("sections",paragraphs);
+            doc.put("links", links);
             article.insert(doc);
             
             //Speicher freigeben
