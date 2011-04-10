@@ -141,7 +141,7 @@ public class XmlDumpReader  extends DefaultHandler {
                 Statement stmt = (Statement) this.mysqlConnection.createStatement();
                 String sql = "DROP TABLE IF EXISTS `articles`;";
                 stmt.executeUpdate(sql);
-                sql = "CREATE TABLE IF NOT EXISTS `articles` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `MongoID` varchar(255) NOT NULL,  `Title` varchar(255) NOT NULL,  `Redirect` varchar(255) NOT NULL,  `Comment` text NOT NULL,  `Content` longtext NOT NULL,  PRIMARY KEY (`ID`),  KEY `ArticleTitle` (`Title`)) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
+                sql = "CREATE TABLE IF NOT EXISTS `articles` (  `ID` int(11) NOT NULL AUTO_INCREMENT,  `MongoID` varchar(255) NOT NULL,  `Title` varchar(255) NOT NULL,  `Redirect` varchar(255) NOT NULL,  `Comment` text NOT NULL,  `Content` longtext NOT NULL, `Links` text NOT NULL, PRIMARY KEY (`ID`),  KEY `ArticleTitle` (`Title`)) ENGINE=MyISAM  DEFAULT CHARSET=utf8;";
                 stmt.executeUpdate(sql);
                 if (XmlDumpReader.generateTextIndizes) {
                     sql = "DROP TABLE IF EXISTS `textindex`;";
@@ -509,6 +509,7 @@ public class XmlDumpReader  extends DefaultHandler {
 
         int sectionCount = -2;
         long textindexCount = 0;
+        String sqlLinkValue = "";
         Connection mysqlConnection = null;
         String redirect = "";
 
@@ -518,34 +519,11 @@ public class XmlDumpReader  extends DefaultHandler {
             redirect = splittedRedirect[1].trim().substring(0, splittedRedirect[1].length()-2);
         }
 
-        //mysql insert kompletter artikel
-        try {
-            mysqlConnection = this.mysqlConnection;
-            Statement stmt = (Statement) mysqlConnection.createStatement();
-            String sql = "INSERT INTO  `articles` (`ID` , `MongoID` , `Title` , `Redirect` , `Comment` , `Content` )"
-                    + "VALUES ("
-                    + "NULL ,  \""+mongoid+"\",  "+XmlDumpReader.sqlEscape(title)+",  '"+redirect+"',  "+XmlDumpReader.sqlEscape(comment)+",  "+XmlDumpReader.sqlEscape(rev.Text)+" "
-                    + ");";
-            stmt.executeUpdate(sql);
-            this.lastInsertedArticleID++;
-            //frage eingefuegte ID ab, da sie als Relation fuer die Absatze gebraucht wird
-            //deaktiviert aus Performancegruenden
-            /*sql = "SELECT `ID` FROM `articles` WHERE 1 ORDER BY `ID` DESC LIMIT 1;";
-            ResultSet lastArticle = stmt.executeQuery(sql);
-            while (lastArticle.next()) {
-                lastInsertedArticleID = lastArticle.getInt("ID");
-            }*/
-            
-        } catch(SQLException e) {
-            System.err.println("Fehler beim mysql insert: "+e.getMessage());
-        }
         //jedes einzelene unterkapitel wird zusaetzlich seperat gespeichert
         for (String string : splittedText) {
             sectionCount++;
             try {
               subtitle = subtitles.get(sectionCount);
-              //ersetze . durch :, da ansonsten fehler beim insert auftreten 
-              subtitle = subtitle.replace(".",":");
             } catch (Exception e) {
               subtitle = "";
             }
@@ -582,7 +560,7 @@ public class XmlDumpReader  extends DefaultHandler {
                     ArrayList<String> linksParagraph = new ArrayList<String>();
                     String linkText = "";
                     int linksCount = -1;
-                    String sqlLinkValue = "";
+                    
                     while (matchLinks.find()) {
                         linksCount++;
                         linkText = matchLinks.group().trim();
@@ -591,21 +569,7 @@ public class XmlDumpReader  extends DefaultHandler {
                         links.add(linkText);
                         linksParagraph.add(linkText);
                         sqlLinkValue=sqlLinkValue+","+linkText;
-                        //mysql insert fuer links
-                        //deaktiviert, da nicht relevant fuer Benchmark
-                        /*try {
-                            Statement stmt = (Statement) this.mysqlConnection.createStatement();
-                            String sql = "INSERT INTO  `textindex_link` (`ID` , `ArticleID`, `Link`)"
-                                    + "VALUES ("
-                                    + "NULL ,  '"+lastInsertedArticleID+"', "+XmlDumpReader.sqlEscape(linkText)+" "
-                                    + ");";
-                            stmt.executeUpdate(sql);
-                        } catch(SQLException e) {
-                            System.err.println("Fehler beim mysql insert von textindex: "+e.getMessage());
-                        }*/
                     }
-                    if (sqlLinkValue.length()>0) sqlLinkValue=sqlLinkValue.substring(1);
-
 
                     //mysql + mongodb insert für unterkapitel für textindexierung
                     if (XmlDumpReader.generateTextIndizes) {
@@ -632,12 +596,36 @@ public class XmlDumpReader  extends DefaultHandler {
                 }
             }
         }
+        
+            //mysql insert kompletter artikel
+            try {
+                mysqlConnection = this.mysqlConnection;
+                Statement stmt = (Statement) mysqlConnection.createStatement();
+                if (sqlLinkValue.length()>0) sqlLinkValue=sqlLinkValue.substring(1);
+                String sql = "INSERT INTO  `articles` (`ID` , `MongoID` , `Title` , `Redirect` , `Comment` , `Content`, `Links` )"
+                        + "VALUES ("
+                        + "NULL ,  \""+mongoid+"\",  "+XmlDumpReader.sqlEscape(title)+",  '"+redirect+"',  "+XmlDumpReader.sqlEscape(comment)+",  "+XmlDumpReader.sqlEscape(rev.Text)+", "+XmlDumpReader.sqlEscape(sqlLinkValue)+" "
+                        + ");";
+                stmt.executeUpdate(sql);
+                this.lastInsertedArticleID++;
+                //frage eingefuegte ID ab, da sie als Relation fuer die Absatze gebraucht wird
+                //deaktiviert aus Performancegruenden
+                /*sql = "SELECT `ID` FROM `articles` WHERE 1 ORDER BY `ID` DESC LIMIT 1;";
+                ResultSet lastArticle = stmt.executeQuery(sql);
+                while (lastArticle.next()) {
+                    lastInsertedArticleID = lastArticle.getInt("ID");
+                }*/
+
+            } catch(SQLException e) {
+                System.err.println("Fehler beim mysql insert: "+e.getMessage());
+            }
+
             //artikel in mongodb einfuegen
-            
+
             doc.put("sections",paragraphs);
             doc.put("links", links);
             article.insert(doc);
-            
+
             //Speicher freigeben
             article = null;
             mysqlConnection = null;
